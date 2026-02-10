@@ -37,7 +37,13 @@ load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
-mongo_client = AsyncIOMotorClient(mongo_url)
+# Fix SSL certificate verification on macOS
+import ssl
+import certifi
+mongo_client = AsyncIOMotorClient(
+    mongo_url,
+    tlsCAFile=certifi.where()
+)
 db = mongo_client[os.environ.get('DB_NAME', 'unsent_valentine')]
 
 # Encryption key

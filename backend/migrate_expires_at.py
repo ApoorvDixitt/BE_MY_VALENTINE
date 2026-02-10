@@ -1,11 +1,12 @@
 """One-time migration: convert string expires_at to datetime for TTL index."""
 import asyncio
+import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone
 
 async def migrate():
-    client = AsyncIOMotorClient("mongodb://localhost:27017")
-    db = client["unsent_valentine"]
+    client = AsyncIOMotorClient(os.getenv("MONGO_URL"))
+    db = client[os.getenv("DB_NAME", "unsent_valentine")]
 
     for coll_name in ["orders", "letters"]:
         coll = db[coll_name]
