@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 36 56% 96%;
+    --foreground: 16 36% 12%;
+    --card: 36 56% 97%;
+    --card-foreground: 16 36% 12%;
+    --popover: 36 56% 97%;
+    --popover-foreground: 16 36% 12%;
+    --primary: 346 63% 22%;
+    --primary-foreground: 36 60% 96%;
+    --secondary: 352 36% 88%;
+    --secondary-foreground: 346 63% 22%;
+    --muted: 34 34% 90%;
+    --muted-foreground: 16 12% 38%;
+    --accent: 38 55% 63%;
+    --accent-foreground: 16 36% 12%;
+    --destructive: 2 70% 44%;
+    --destructive-foreground: 36 60% 96%;
+    --border: 18 20% 78%;
+    --input: 18 20% 78%;
+    --ring: 346 63% 22%;
+    --radius: 0.75rem;
+
+    --ritual-wine: 346 63% 22%;
+    --ritual-wine-deep: 346 70% 14%;
+    --ritual-blush: 352 36% 88%;
+    --ritual-parchment: 36 56% 96%;
+    --ritual-ink: 16 36% 12%;
+    --ritual-candle: 38 55% 63%;
+
+    --font-ui: 'Figtree', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Fraunces', ui-serif, Georgia, serif;
+    --font-letter: 'EB Garamond', ui-serif, Georgia, serif;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Paper texture overlay */
+.paper-noise::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('https://images.unsplash.com/photo-1709467585708-464df45fad00?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=85');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.06;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Letter text styling */
+.letter-text {
+  font-family: var(--font-letter);
+  font-size: 17px;
+  line-height: 1.95;
+  letter-spacing: 0.01em;
+  color: hsl(var(--ritual-ink));
+}
+
+@media (min-width: 640px) {
+  .letter-text {
+    font-size: 18px;
+  }
+}
+
+.letter-text p {
+  margin-bottom: 1.25em;
+}
+
+/* Selection color */
+::selection {
+  background: rgba(231, 185, 195, 0.65);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+/* Smooth transitions for interactive elements */
+button, a, input, textarea {
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Envelope animation keyframes */
+@keyframes envelope-flap {
+  0% { transform: rotateX(0deg); }
+  100% { transform: rotateX(-180deg); }
+}
+
+@keyframes letter-slide-up {
+  0% { transform: translateY(0); opacity: 0.5; }
+  100% { transform: translateY(-40px); opacity: 1; }
+}
+
+@keyframes gentle-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  0% { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-gentle-pulse {
+  animation: gentle-pulse 3s ease-in-out infinite;
+}

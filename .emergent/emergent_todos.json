@@ -1,0 +1,30 @@
+[
+  {
+    "content": "Step 1: Install cachetools + slowapi",
+    "status": "completed"
+  },
+  {
+    "content": "Step 2: Backend infra — TTLCache, BodySizeLimit, SlowAPI, CORS, HMAC fix, indexes, cleanup task",
+    "status": "completed"
+  },
+  {
+    "content": "Step 3: Pydantic models — max_length + reveal_at UTC validator",
+    "status": "completed"
+  },
+  {
+    "content": "Step 4: Route handlers — atomic generation, atomic open, Dodo executor, webhook product check, retry endpoint",
+    "status": "completed"
+  },
+  {
+    "content": "Step 5: Migration script — fix string expires_at to datetime",
+    "status": "completed"
+  },
+  {
+    "content": "Step 6: Frontend — reveal_at UTC, polling stop on 404, localStorage clear, share URL, audio fallback",
+    "status": "completed"
+  },
+  {
+    "content": "Verification: end-to-end payment flow + race conditions + TTL",
+    "status": "completed"
+  }
+]
