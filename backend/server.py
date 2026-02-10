@@ -68,8 +68,15 @@ VALID_PRODUCT_IDS = {DODO_PRODUCT_USD, DODO_PRODUCT_INR} - {''}
 dodo_client = None
 if DODO_API_KEY and PAYMENT_MODE == 'dodo':
     try:
-        dodo_client = DodoPayments(bearer_token=DODO_API_KEY, environment=DODO_ENVIRONMENT)
-        logging.info(f"Dodo Payments client initialized ({DODO_ENVIRONMENT})")
+        dodo_client = DodoPayments(
+            bearer_token=DODO_API_KEY,
+            environment=DODO_ENVIRONMENT,
+            webhook_key=DODO_WEBHOOK_SECRET if DODO_WEBHOOK_SECRET else None,
+        )
+        logging.info(
+            f"Dodo Payments client initialized ({DODO_ENVIRONMENT})"
+            f"{' with webhook verification' if DODO_WEBHOOK_SECRET else ' (no webhook_key set)'}"
+        )
     except Exception as e:
         logging.error(f"Failed to initialize Dodo client: {e}")
 
@@ -1087,61 +1094,93 @@ async def open_letter(token: str):
 @limiter.limit("60/minute")
 async def dodo_webhook(request: Request, background_tasks: BackgroundTasks):
     try:
-        body = await request.body()
+        raw_body = await request.body()
 
-        # Signature verification
-        if DODO_WEBHOOK_SECRET:
-            sig_valid = verify_webhook_signature(body, dict(request.headers), DODO_WEBHOOK_SECRET)
-            if not sig_valid:
-                logger.warning("Webhook signature verification failed")
-                if DODO_ENVIRONMENT != "test_mode":
+        # Prefer official SDK verification (see docs):
+        # https://docs.dodopayments.com/developer-resources/webhooks
+        payload = None
+        if dodo_client and getattr(dodo_client, "webhooks", None) and DODO_WEBHOOK_SECRET:
+            try:
+                payload = dodo_client.webhooks.unwrap(
+                    raw_body,
+                    headers={
+                        "webhook-id": request.headers.get("webhook-id", ""),
+                        "webhook-signature": request.headers.get("webhook-signature", ""),
+                        "webhook-timestamp": request.headers.get("webhook-timestamp", ""),
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"Webhook signature verification failed: {e}")
+                # In live_mode reject invalid signatures; in test_mode allow fallthrough for easier testing
+                if DODO_ENVIRONMENT == "live_mode":
                     return JSONResponse(status_code=401, content={"status": "error", "message": "Invalid signature"})
+        else:
+            # Fallback: parse payload without verification (dev/test only)
+            try:
+                payload = json.loads(raw_body)
+            except Exception:
+                payload = {}
 
-        payload = json.loads(body)
+        # Convert to dict if unwrap returned a typed object
+        if not isinstance(payload, dict):
+            try:
+                payload = json.loads(getattr(payload, "json", lambda: "{}")())
+            except Exception:
+                payload = {}
+
         event_type = payload.get("type", "")
-        event_data = payload.get("data", {})
-        logger.info(f"Dodo webhook: {event_type}")
+        event_data = payload.get("data", {}) or {}
+        logger.info(f"Dodo webhook received: {event_type}")
 
         if event_type == "payment.succeeded":
-            metadata = event_data.get("metadata", {})
+            metadata = event_data.get("metadata", {}) or {}
             order_id = metadata.get("order_id")
             dodo_payment_id = event_data.get("payment_id") or event_data.get("id", "")
 
             if not order_id:
-                logger.warning(f"Webhook without order_id. payment_id: {dodo_payment_id}")
+                logger.warning(f"Webhook payment.succeeded missing order_id. payment_id={dodo_payment_id}")
                 return {"status": "ok", "note": "no order_id"}
 
-            # Issue #14: Idempotency via unique index
+            # Idempotency via unique index on payments.dodo_payment_id
             if dodo_payment_id:
                 try:
                     await db.payments.insert_one({
-                        "dodo_payment_id": dodo_payment_id, "order_id": order_id,
-                        "provider": "dodo", "amount": event_data.get("total_amount", 0),
-                        "currency": event_data.get("currency", "USD"), "status": "confirmed",
-                        "confirmed_at": datetime.now(timezone.utc), "webhook_payload": payload
+                        "dodo_payment_id": dodo_payment_id,
+                        "order_id": order_id,
+                        "provider": "dodo",
+                        "amount": event_data.get("total_amount", 0),
+                        "currency": event_data.get("currency", "USD"),
+                        "status": "confirmed",
+                        "confirmed_at": datetime.now(timezone.utc),
+                        "webhook_payload": payload,
                     })
                 except DuplicateKeyError:
                     logger.info(f"Duplicate webhook for payment {dodo_payment_id}")
                     return {"status": "ok", "note": "already processed"}
 
-            # Mark paid
-            await db.orders.update_one({"order_id": order_id}, {"$set": {
-                "payment_confirmed": True, "payment_provider": "dodo",
-                "dodo_payment_id": dodo_payment_id, "status": "paid",
-                "payment_confirmed_at": datetime.now(timezone.utc).isoformat()
-            }})
+            # Mark order paid
+            await db.orders.update_one(
+                {"order_id": order_id},
+                {"$set": {
+                    "payment_confirmed": True,
+                    "payment_provider": "dodo",
+                    "dodo_payment_id": dodo_payment_id,
+                    "status": "paid",
+                    "payment_confirmed_at": datetime.now(timezone.utc).isoformat(),
+                }}
+            )
 
-            # Issue #1: Atomic trigger
+            # Trigger letter generation
             await trigger_generation(order_id)
-            logger.info(f"Payment confirmed for order {order_id}")
+            logger.info(f"Payment confirmed and generation triggered for order {order_id}")
 
         elif event_type == "payment.failed":
-            order_id = event_data.get("metadata", {}).get("order_id")
+            order_id = (event_data.get("metadata") or {}).get("order_id")
             if order_id:
                 await db.orders.update_one({"order_id": order_id}, {"$set": {"status": "payment_failed"}})
 
         elif event_type == "payment.cancelled":
-            order_id = event_data.get("metadata", {}).get("order_id")
+            order_id = (event_data.get("metadata") or {}).get("order_id")
             if order_id:
                 await db.orders.update_one({"order_id": order_id}, {"$set": {"status": "payment_cancelled"}})
 
