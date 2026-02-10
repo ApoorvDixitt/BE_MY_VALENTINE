@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -66,9 +67,32 @@ if DODO_API_KEY and PAYMENT_MODE == 'dodo':
     except Exception as e:
         logging.error(f"Failed to initialize Dodo client: {e}")
 
+# ==================== LIFESPAN ====================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    try:
+        await db.orders.create_index("order_id", unique=True, background=True)
+        await db.letters.create_index("letter_token", unique=True, background=True)
+        await db.letters.create_index("order_id", background=True)
+        await db.letters.create_index("expires_at", expireAfterSeconds=0, background=True)
+        await db.payments.create_index("dodo_payment_id", unique=True, sparse=True, background=True)
+        logging.info("Database indexes created (incl. TTL + payments)")
+    except Exception as e:
+        logging.error(f"Index creation error: {e}")
+    # Start background cleanup task
+    cleanup_task = asyncio.create_task(cleanup_abandoned_checkouts())
+    
+    yield
+    
+    # Shutdown
+    cleanup_task.cancel()
+    mongo_client.close()
+
 # ==================== APP SETUP ====================
 
-app = FastAPI(title="Letters You Can't Send - Valentine Edition")
+app = FastAPI(title="Letters You Can't Send - Valentine Edition", lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
 
 # Rate limiter (Issue #10)
@@ -1154,23 +1178,6 @@ async def retry_generation(request: Request, order_id: str):
     await trigger_generation(order_id)
     return {"status": "retrying", "order_id": order_id}
 
-# ==================== STARTUP / INDEXES ====================
-
-@app.on_event("startup")
-async def startup_setup():
-    try:
-        # Issue #6: TTL indexes + Issue #14: payments index
-        await db.orders.create_index("order_id", unique=True, background=True)
-        await db.letters.create_index("letter_token", unique=True, background=True)
-        await db.letters.create_index("order_id", background=True)
-        await db.letters.create_index("expires_at", expireAfterSeconds=0, background=True)
-        await db.payments.create_index("dodo_payment_id", unique=True, sparse=True, background=True)
-        logger.info("Database indexes created (incl. TTL + payments)")
-    except Exception as e:
-        logger.error(f"Index creation error: {e}")
-    # Issue #11: Background cleanup
-    asyncio.create_task(cleanup_abandoned_checkouts())
-
 # Include router + middleware
 app.include_router(api_router)
 
@@ -1179,7 +1186,3 @@ cors_origins_raw = os.environ.get('CORS_ORIGINS', '*')
 cors_origins = ["*"] if cors_origins_raw == "*" else [o.strip() for o in cors_origins_raw.split(",")]
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=cors_origins,
                    allow_methods=["*"], allow_headers=["*"])
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    mongo_client.close()

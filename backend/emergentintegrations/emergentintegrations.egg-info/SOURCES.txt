@@ -1,3 +1,4 @@
+pyproject.toml
 setup.py
 emergentintegrations.egg-info/PKG-INFO
 emergentintegrations.egg-info/SOURCES.txt
@@ -6,6 +7,8 @@ emergentintegrations.egg-info/top_level.txt
 llm/__init__.py
 llm/chat.py
 llm/utils.py
+llm/gemeni/image_generation.py
+llm/gemeni/video_generation.py
 llm/openai/__init__.py
 llm/openai/image_generation.py
 llm/openai/realtime.py
